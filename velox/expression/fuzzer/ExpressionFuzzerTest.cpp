@@ -37,7 +37,7 @@ DEFINE_string(
 
 DEFINE_uint32(
     req_timeout_ms,
-    1000,
+    10000,
     "Timeout in milliseconds for HTTP requests made to reference DB, "
     "such as Presto. Example: --req_timeout_ms=2000");
 
@@ -84,6 +84,15 @@ int main(int argc, char** argv) {
       "regexp_like",
       "regexp_replace",
       "regexp_split",
+      // Presto not support
+      "plus",
+      "minus",
+      "divide",
+      "multiply",
+      "subscript",
+      "array_sort", //for array_sort with lambda, --seed=1144235377
+      "array_sort_desc", //same as above
+      "array_remove", //different try behavior
   };
   size_t initialSeed = FLAGS_seed == 0 ? std::time(nullptr) : FLAGS_seed;
   std::shared_ptr<ReferenceQueryRunner> referenceQueryRunner{nullptr};
