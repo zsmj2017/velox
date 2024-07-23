@@ -68,3 +68,16 @@ add_executable(velox_prefixsort_benchmark PrefixSortBenchmark.cpp)
 
 target_link_libraries(velox_prefixsort_benchmark velox_exec velox_vector_fuzzer
                       velox_vector_test_lib ${FOLLY_BENCHMARK})
+
+add_executable(velox_window_prefixsort_benchmark WindowPrefixSortBenchmark.cpp)
+
+target_link_libraries(
+  velox_window_prefixsort_benchmark
+  velox_exec
+  velox_exec_test_lib
+  velox_hive_connector
+  velox_vector_fuzzer
+  velox_vector_test_lib
+  velox_window
+  velox_aggregates
+  ${FOLLY_BENCHMARK})
