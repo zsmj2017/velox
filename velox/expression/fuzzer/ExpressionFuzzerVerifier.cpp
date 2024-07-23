@@ -25,6 +25,8 @@
 #include "velox/expression/FunctionSignature.h"
 #include "velox/expression/ReverseSignatureBinder.h"
 #include "velox/expression/fuzzer/ExpressionFuzzer.h"
+#include "velox/connectors/hive/HiveConnector.h"
+#include "velox/common/file/FileSystems.h"
 
 namespace facebook::velox::fuzzer {
 
@@ -102,6 +104,14 @@ ExpressionFuzzerVerifier::ExpressionFuzzerVerifier(
           vectorFuzzer_,
           options.expressionFuzzerOptions),
       referenceQueryRunner_{referenceQueryRunner} {
+  filesystems::registerLocalFileSystem();
+  auto hiveConnector =
+      connector::getConnectorFactory(
+          connector::hive::HiveConnectorFactory::kHiveConnectorName)
+          ->newConnector(
+              "test-hive", std::make_shared<core::MemConfig>());
+  connector::registerConnector(hiveConnector);
+
   seed(initialSeed);
 
   // Init stats and register listener.

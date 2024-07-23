@@ -151,7 +151,6 @@ PrestoQueryRunner::PrestoQueryRunner(
       user_{std::move(user)},
       timeout_(timeout) {
   eventBaseThread_.start("PrestoQueryRunner");
-  dwrf::registerDwrfWriterFactory();
 }
 
 std::optional<std::string> PrestoQueryRunner::toSql(
@@ -201,6 +200,10 @@ std::optional<std::string> PrestoQueryRunner::toSql(
 
 namespace {
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> b6c74cade (debug make PQR work 2)
 std::string toWindowCallSql(
     const core::CallTypedExprPtr& call,
     bool ignoreNulls = false) {
