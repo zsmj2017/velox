@@ -188,6 +188,8 @@ class ExpressionFuzzerVerifier {
       const RowVectorPtr& rowVector,
       VectorFuzzer& vectorFuzzer);
 
+  RowVectorPtr fuzzInputWithRowNumber(VectorFuzzer& fuzzer, const RowTypePtr& type);
+
   const Options options_;
 
   FuzzerGenerator rng_;
