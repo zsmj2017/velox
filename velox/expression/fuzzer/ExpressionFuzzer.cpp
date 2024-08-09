@@ -451,6 +451,7 @@ bool isSupportedSignature(
       useTypeName(signature, "decimal") ||
       useTypeName(signature, "timestamp with time zone") ||
       useTypeName(signature, "interval day to second") ||
+      useTypeName(signature, "interval year to month") ||
       useTypeName(signature, "hugeint") ||
       useTypeName(signature, "json") ||
       (enableComplexType && useTypeName(signature, "unknown")));
