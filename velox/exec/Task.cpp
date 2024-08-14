@@ -642,14 +642,14 @@ RowVectorPtr Task::next(ContinueFuture* future) {
 
       ++runnableDrivers;
 
-      std::shared_ptr<BlockingState> blockingState;
-      auto result = drivers_[i]->next(blockingState);
+      ContinueFuture driverFuture = ContinueFuture::makeEmpty();
+      auto result = drivers_[i]->next(&driverFuture);
       if (result) {
         return result;
       }
 
-      if (blockingState) {
-        futures[i] = blockingState->future();
+      if (driverFuture.valid()) {
+        futures[i] = std::move(driverFuture);
       }
 
       if (error()) {
@@ -885,7 +885,19 @@ void Task::initializePartitionOutput() {
 // static
 void Task::resume(std::shared_ptr<Task> self) {
   std::vector<std::shared_ptr<Driver>> offThreadDrivers;
-  {
+  std::vector<ContinuePromise> resumePromises;
+  SCOPE_EXIT {
+    // Get the stats and free the resources of Drivers that were not on
+    // thread.
+    for (auto& driver : offThreadDrivers) {
+      self->driversClosedByTask_.emplace_back(driver);
+      driver->closeByTask();
+    }
+    // Fulfill resume futures.
+    for (auto& promise : resumePromises) {
+      promise.setValue();
+    }
+  };
     std::lock_guard<std::timed_mutex> l(self->mutex_);
     // Setting pause requested must be atomic with the resuming so that
     // suspended sections do not go back on thread during resume.
@@ -919,42 +931,39 @@ void Task::resume(std::shared_ptr<Task> self) {
             //
             // 2023/07.13 Hongze: Is there a way to hide the execution model
             // (single or async) from here?
-            Driver::enqueue(driver);
-          }
+          //
+          // Do not continue the driver if no executor is supplied,
+          // This usually happens in single-threaded execution.
+          Driver::enqueue(driver);
         }
-      }
-    } else {
-      // NOTE: no need to resume task execution if the task has been terminated.
-      // But we need to close the drivers which are off threads as task
-      // terminate code path skips closing the off thread drivers if the task
-      // has been requested pause and leave the task resume path to handle. If
-      // a task has been paused, then there might be concurrent memory
-      // arbitration thread to reclaim the memory resource from the off thread
-      // driver operators.
-      for (auto& driver : self->drivers_) {
-        if (driver == nullptr) {
-          continue;
-        }
-        if (driver->isOnThread()) {
-          VELOX_CHECK(driver->isTerminated());
-          continue;
-        }
-        if (driver->isTerminated()) {
-          continue;
-        }
-        driver->state().isTerminated = true;
-        driver->state().setThread();
-        self->driverClosedLocked();
-        offThreadDrivers.push_back(std::move(driver));
       }
     }
+  } else {
+    // NOTE: no need to resume task execution if the task has been terminated.
+    // But we need to close the drivers which are off threads as task
+    // terminate code path skips closing the off thread drivers if the task
+    // has been requested pause and leave the task resume path to handle. If
+    // a task has been paused, then there might be concurrent memory
+    // arbitration thread to reclaim the memory resource from the off thread
+    // driver operators.
+    for (auto& driver : self->drivers_) {
+      if (driver == nullptr) {
+        continue;
+      }
+      if (driver->isOnThread()) {
+        VELOX_CHECK(driver->isTerminated());
+        continue;
+      }
+      if (driver->isTerminated()) {
+        continue;
+      }
+      driver->state().isTerminated = true;
+      driver->state().setThread();
+      self->driverClosedLocked();
+      offThreadDrivers.push_back(std::move(driver));
+    }
   }
-
-  // Get the stats and free the resources of Drivers that were not on thread.
-  for (auto& driver : offThreadDrivers) {
-    self->driversClosedByTask_.emplace_back(driver);
-    driver->closeByTask();
-  }
+  resumePromises.swap(self->resumePromises_);
 }
 
 void Task::validateGroupedExecutionLeafNodes() {
@@ -2724,6 +2733,24 @@ ContinueFuture Task::requestPause() {
   TestValue::adjust("facebook::velox::exec::Task::requestPauseLocked", this);
   pauseRequested_ = true;
   return makeFinishFutureLocked("Task::requestPause");
+}
+
+bool Task::pauseRequested(ContinueFuture* future) {
+  if (FOLLY_LIKELY(future == nullptr)) {
+    // It is ok to return 'pauseRequested_' without a mutex lock if user doesn't
+    // want to wait for task to resume.
+    return pauseRequested_;
+  }
+
+  std::lock_guard<std::timed_mutex> l(mutex_);
+  if (!pauseRequested_) {
+    VELOX_CHECK(resumePromises_.empty());
+    VELOX_CHECK(!future->valid());
+    return false;
+  }
+  resumePromises_.emplace_back("Task::isPaused");
+  *future = resumePromises_.back().getSemiFuture();
+  return true;
 }
 
 void Task::createExchangeClientLocked(

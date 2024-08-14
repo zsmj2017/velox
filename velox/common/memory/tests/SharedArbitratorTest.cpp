@@ -305,6 +305,48 @@ class SharedArbitrationTest : public exec::test::HiveConnectorTestBase {
   std::atomic_uint64_t numAddedPools_{0};
 };
 
+namespace {
+std::unique_ptr<folly::Executor> newMultiThreadedExecutor() {
+  return std::make_unique<folly::CPUThreadPoolExecutor>(32);
+}
+
+struct TestParam {
+  bool isSingleThreaded{false};
+};
+} // namespace
+
+/// A test fixture that runs cases within multi-threaded execution mode.
+class SharedArbitrationTest : public SharedArbitrationTestBase {
+ protected:
+  void SetUp() override {
+    SharedArbitrationTestBase::SetUp();
+    executor_ = newMultiThreadedExecutor();
+  }
+};
+/// A test fixture that runs cases within both single-threaded and
+/// multi-threaded execution modes.
+class SharedArbitrationTestWithThreadingModes
+    : public testing::WithParamInterface<TestParam>,
+      public SharedArbitrationTestBase {
+ public:
+  static std::vector<TestParam> getTestParams() {
+    return std::vector<TestParam>({{false}, {true}});
+  }
+
+ protected:
+  void SetUp() override {
+    SharedArbitrationTestBase::SetUp();
+    isSingleThreaded_ = GetParam().isSingleThreaded;
+    if (isSingleThreaded_) {
+      executor_ = nullptr;
+    } else {
+      executor_ = newMultiThreadedExecutor();
+    }
+  }
+
+  bool isSingleThreaded_{false};
+};
+
 DEBUG_ONLY_TEST_F(SharedArbitrationTest, queryArbitrationStateCheck) {
   const std::vector<RowVectorPtr> vectors =
       createVectors(rowType_, 32, 32 << 20);
