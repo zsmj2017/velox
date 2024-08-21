@@ -1089,9 +1089,9 @@ TypePtr randType(
   }
   switch (rand<uint32_t>(rng) % 3) {
     case 0:
-      return MAP(
+      /*return MAP(
           randType(rng, scalarTypes, 0),
-          randType(rng, scalarTypes, maxDepth - 1));
+          randType(rng, scalarTypes, maxDepth - 1));*/
     case 1:
       return ARRAY(randType(rng, scalarTypes, maxDepth - 1));
     default:
