@@ -1023,6 +1023,12 @@ core::TypedExprPtr ExpressionFuzzer::generateExpression(
       chosenFunctionName = templateList[chosenExprIndex];
     }
 
+    int32_t extraLevelOfNesting = 0;
+    auto functionTransformer = options_.functionTransformers.find(chosenFunctionName);
+    if (functionTransformer != options_.functionTransformers.end()) {
+      state.remainingLevelOfNesting_ -= functionTransformer->second->extraLevelOfNesting();
+    }
+
     if (chosenFunctionName == "cast") {
       expression = generateCastExpression(returnType);
     } else if (chosenFunctionName == "row_constructor") {
@@ -1039,6 +1045,10 @@ core::TypedExprPtr ExpressionFuzzer::generateExpression(
         expression = generateExpressionFromSignatureTemplate(
             returnType, chosenFunctionName);
       }
+    }
+    if (functionTransformer != options_.functionTransformers.end()) {
+      expression = functionTransformer->second->transform(std::move(expression));
+      state.remainingLevelOfNesting_ += functionTransformer->second->extraLevelOfNesting();
     }
   }
   if (!expression) {
