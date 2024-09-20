@@ -88,6 +88,9 @@ class Window : public Operator {
     const std::optional<FrameChannelArg> end;
   };
 
+  // Returns if a window operator support rows-wise streaming processing or not.
+  // Currently we supports 'rank', 'dense_rank' and 'row_number' functions with
+  // any frame type. Also supports the agg window function with default frame.
   bool supportRowsStreaming();
 
   // Creates WindowFunction and frame objects for this operator.

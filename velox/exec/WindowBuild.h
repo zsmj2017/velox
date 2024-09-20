@@ -63,16 +63,12 @@ class WindowBuild {
   // operator to consume.
   virtual bool hasNextPartition() = 0;
 
-  // The Window operator invokes this function to get the next Window partition
-  // to pass along to the WindowFunction. The WindowPartition has APIs to access
-  // the underlying columns of Window partition data.
-  // Check hasNextPartition() before invoking this function. This function fails
-  // if called when no partition is available.
+  /// The Window operator invokes this function to get the next Window partition
+  /// to pass along to the WindowFunction. The WindowPartition has APIs to
+  /// access the underlying columns of Window partition data. Check
+  /// hasNextPartition() before invoking this function. This function fails if
+  /// called when no partition is available.
   virtual std::shared_ptr<WindowPartition> nextPartition() = 0;
-
-  /// The type of WindowBuild: RowStreamingWindowBuild, StreamingWindowBuild and
-  /// SortWindowBuild.
-  virtual std::string_view windowBuildType() const = 0;
 
   // Returns the average size of input rows in bytes stored in the
   // data container of the WindowBuild.

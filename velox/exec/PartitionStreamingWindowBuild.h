@@ -20,13 +20,13 @@
 
 namespace facebook::velox::exec {
 
-/// The StreamingWindowBuild is used when the input data is already sorted by
-/// {partition keys + order by keys}. The logic identifies partition changes
-/// when receiving input rows and splits out WindowPartitions for the Window
-/// operator to process.
-class StreamingWindowBuild : public WindowBuild {
+/// The PartitionStreamingWindowBuild is used when the input data is already
+/// sorted by {partition keys + order by keys}. The logic identifies partition
+/// changes when receiving input rows and splits out WindowPartitions for the
+/// Window operator to process.
+class PartitionStreamingWindowBuild : public WindowBuild {
  public:
-  StreamingWindowBuild(
+  PartitionStreamingWindowBuild(
       const std::shared_ptr<const core::WindowNode>& windowNode,
       velox::memory::MemoryPool* pool,
       const common::SpillConfig* spillConfig,
@@ -53,10 +53,6 @@ class StreamingWindowBuild : public WindowBuild {
     // one, so can consume input rows.
     return partitionStartRows_.size() == 0 ||
         currentPartition_ == partitionStartRows_.size() - 2;
-  }
-
-  std::string_view windowBuildType() const override {
-    return "StreamingWindowBuild";
   }
 
  private:

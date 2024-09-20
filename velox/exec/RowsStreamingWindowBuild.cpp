@@ -16,17 +16,38 @@
 
 #include "velox/exec/RowsStreamingWindowBuild.h"
 #include "velox/common/testutil/TestValue.h"
+#include "velox/exec/WindowFunction.h"
 
 namespace facebook::velox::exec {
+
+namespace {
+bool hasRangeFrame(const std::shared_ptr<const core::WindowNode>& windowNode) {
+  for (const auto& function : windowNode->windowFunctions()) {
+    if (function.frame.type == core::WindowNode::WindowType::kRange) {
+      return true;
+    }
+  }
+  return false;
+}
+} // namespace
 
 RowsStreamingWindowBuild::RowsStreamingWindowBuild(
     const std::shared_ptr<const core::WindowNode>& windowNode,
     velox::memory::MemoryPool* pool,
     const common::SpillConfig* spillConfig,
     tsan_atomic<bool>* nonReclaimableSection)
-    : WindowBuild(windowNode, pool, spillConfig, nonReclaimableSection) {}
+    : WindowBuild(windowNode, pool, spillConfig, nonReclaimableSection),
+      hasRangeFrame_(hasRangeFrame(windowNode)) {
+  velox::common::testutil::TestValue::adjust(
+      "facebook::velox::exec::RowsStreamingWindowBuild::RowsStreamingWindowBuild",
+      this);
+}
 
-void RowsStreamingWindowBuild::buildNextInputOrPartition(bool isFinished) {
+void RowsStreamingWindowBuild::addPartitionInputs(bool finished) {
+  if (inputRows_.empty()) {
+    return;
+  }
+
   if (windowPartitions_.size() <= inputPartition_) {
     windowPartitions_.push_back(std::make_shared<WindowPartition>(
         data_.get(), inversedInputChannels_, sortKeyInfo_));
@@ -34,17 +55,15 @@ void RowsStreamingWindowBuild::buildNextInputOrPartition(bool isFinished) {
 
   windowPartitions_[inputPartition_]->addRows(inputRows_);
 
-  if (isFinished) {
+  if (finished) {
     windowPartitions_[inputPartition_]->setComplete();
-    inputPartition_++;
+    ++inputPartition_;
   }
 
   inputRows_.clear();
 }
 
 void RowsStreamingWindowBuild::addInput(RowVectorPtr input) {
-  velox::common::testutil::TestValue::adjust(
-      "facebook::velox::exec::RowsStreamingWindowBuild::addInput", this);
   for (auto i = 0; i < inputChannels_.size(); ++i) {
     decodedInputVectors_[i].decode(*input->childAt(inputChannels_[i]));
   }
@@ -58,11 +77,18 @@ void RowsStreamingWindowBuild::addInput(RowVectorPtr input) {
 
     if (previousRow_ != nullptr &&
         compareRowsWithKeys(previousRow_, newRow, partitionKeyInfo_)) {
-      buildNextInputOrPartition(true);
+      addPartitionInputs(true);
     }
 
     if (previousRow_ != nullptr && inputRows_.size() >= numRowsPerOutput_) {
-      buildNextInputOrPartition(false);
+      // Needs to wait the peer group ready for range frame.
+      if (hasRangeFrame_) {
+        if (compareRowsWithKeys(previousRow_, newRow, sortKeyInfo_)) {
+          addPartitionInputs(false);
+        }
+      } else {
+        addPartitionInputs(false);
+      }
     }
 
     inputRows_.push_back(newRow);
@@ -71,18 +97,17 @@ void RowsStreamingWindowBuild::addInput(RowVectorPtr input) {
 }
 
 void RowsStreamingWindowBuild::noMoreInput() {
-  buildNextInputOrPartition(true);
+  addPartitionInputs(true);
 }
 
 std::shared_ptr<WindowPartition> RowsStreamingWindowBuild::nextPartition() {
-  // The previous partition has already been set to nullptr by the
-  // Window.cpp#callResetPartition() method.
+  VELOX_CHECK(hasNextPartition());
   return windowPartitions_[++outputPartition_];
 }
 
 bool RowsStreamingWindowBuild::hasNextPartition() {
-  return windowPartitions_.size() > 0 &&
-      outputPartition_ <= int(windowPartitions_.size() - 2);
+  return !windowPartitions_.empty() &&
+      outputPartition_ + 2 <= windowPartitions_.size();
 }
 
 } // namespace facebook::velox::exec
