@@ -197,7 +197,7 @@ struct GetJsonObjectFunction {
     // These chars can be prior to a valid ending char.
     if (endingChar == ' ' || endingChar == '\r' || endingChar == '\n' ||
         endingChar == '\t') {
-      return isValidEndingCharacter(currentPos++);
+      return isValidEndingCharacter(++currentPos);
     }
     return false;
   }
